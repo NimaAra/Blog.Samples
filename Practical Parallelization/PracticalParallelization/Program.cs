@@ -133,6 +133,7 @@
 
             // Setup the queue
             var pcq = new ProducerConsumerQueue<string>(work, WorkerCount, BoundedCapacity);
+            pcq.OnException += (sender, ex) => Console.WriteLine("Oooops: " + ex.Message);
 
             // Begin producing
             foreach (var line in File.ReadLines(InputFile.FullName))
