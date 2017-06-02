@@ -67,10 +67,19 @@
             const int BoundedCapacity = 10000;
             var result = new ConcurrentDictionary<string, uint>(StringComparer.InvariantCultureIgnoreCase);
 
-            var bufferBlock = new BufferBlock<string>(new DataflowBlockOptions { BoundedCapacity = BoundedCapacity });
-            var splitLineToWordsBlock = new TransformManyBlock<string, string>(line => line.Split(Separators, StringSplitOptions.RemoveEmptyEntries),
-                new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = 1, BoundedCapacity = BoundedCapacity });
+            var bufferBlock = new BufferBlock<string>(
+                new DataflowBlockOptions { BoundedCapacity = BoundedCapacity });
+            
+            var splitLineToWordsBlock = new TransformManyBlock<string, string>(
+                line => line.Split(Separators, StringSplitOptions.RemoveEmptyEntries),
+                new ExecutionDataflowBlockOptions
+                {
+                    MaxDegreeOfParallelism = 1, 
+                    BoundedCapacity = BoundedCapacity
+                });
+            
             var batchWordsBlock = new BatchBlock<string>(5000);
+            
             var trackWordsOccurrencBlock = new ActionBlock<string[]>(words =>
             {
                 foreach (var word in words)
@@ -78,20 +87,24 @@
                     if (!IsValidWord(word)) { continue; }
                     result.AddOrUpdate(word, 1, (key, oldVal) => oldVal + 1);
                 }
-            }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = WorkerCount });
+            }, 
+            new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = WorkerCount });
 
             var defaultLinkOptions = new DataflowLinkOptions { PropagateCompletion = true };
             bufferBlock.LinkTo(splitLineToWordsBlock, defaultLinkOptions);
             splitLineToWordsBlock.LinkTo(batchWordsBlock, defaultLinkOptions);
             batchWordsBlock.LinkTo(trackWordsOccurrencBlock, defaultLinkOptions);
 
+            // Begin producing
             foreach (var line in File.ReadLines(InputFile.FullName))
             {
                 bufferBlock.SendAsync(line).Wait();
             }
 
             bufferBlock.Complete();
+            // End of producing
 
+            // Wait for workers to finish their work
             trackWordsOccurrencBlock.Completion.Wait();
 
             return result
@@ -108,6 +121,7 @@
             const int BoundedCapacity = 10000;
             var result = new ConcurrentDictionary<string, uint>(StringComparer.InvariantCultureIgnoreCase);
 
+            // Declare the worker
             Action<string> work = line =>
             {
                 foreach (var word in line.Split(Separators, StringSplitOptions.RemoveEmptyEntries))
@@ -117,14 +131,18 @@
                 }
             };
 
+            // Setup the queue
             var pcq = new ProducerConsumerQueue<string>(work, WorkerCount, BoundedCapacity);
 
+            // Begin producing
             foreach (var line in File.ReadLines(InputFile.FullName))
             {
                 pcq.Add(line);
             }
             pcq.CompleteAdding();
+            // End of producing
 
+            // Wait for workers to finish their work
             pcq.Completion.Wait();
 
             return result
@@ -140,8 +158,11 @@
             const int WorkerCount = 12;
             const int BoundedCapacity = 10000;
             var result = new ConcurrentDictionary<string, uint>(StringComparer.InvariantCultureIgnoreCase);
+
+            // Setup the queue
             var blockingCollection = new BlockingCollection<string>(BoundedCapacity);
 
+            // Declare the worker
             Action work = () =>
             {
                 foreach (var line in blockingCollection.GetConsumingEnumerable())
@@ -154,15 +175,19 @@
                 }
             };
 
+            // Start the workers
             var tasks = Enumerable.Range(1, WorkerCount).Select(n => Task.Factory.StartNew(work, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default))
                 .ToArray();
 
+            // Begin producing
             foreach (var line in File.ReadLines(InputFile.FullName))
             {
                 blockingCollection.Add(line);
             }
             blockingCollection.CompleteAdding();
+            // End of producing
 
+            // Wait for workers to finish their work
             Task.WaitAll(tasks);
 
             return result
