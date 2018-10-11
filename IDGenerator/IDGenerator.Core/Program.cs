@@ -13,7 +13,8 @@
             ThreadLocal,
             ThreadStatic,
             NewBuffer,
-            SpinLock
+            SpinLock,
+            Span
         }
         
         private const int ITERATION_COUNT = 1_000_000_000;
@@ -21,7 +22,7 @@
         static void Main()
         {
             // var summary = BenchmarkDotNet.Running.BenchmarkRunner.Run<Benchmarker>();
-            RunScenario(Scenario.ThreadLocal, 12);
+            RunScenario(Scenario.Span, 12);
         }
 
         private static void RunScenario(Scenario scenario, int threadCount)
@@ -52,6 +53,11 @@
                 case Scenario.SpinLock:
                     idGenerator = IDGeneratorService.GetNextIDSpinLock;
                     break;
+#if NETCOREAPP2_1
+                case Scenario.Span:
+                    idGenerator = IDGeneratorService.GetNextIDSpan;
+                    break;
+                #endif
                 default:
                     throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null);
             }
