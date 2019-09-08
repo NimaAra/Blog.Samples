@@ -6,6 +6,7 @@
     using System.Diagnostics;
     using System.IO;
     using System.Linq;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using System.Threading.Tasks.Dataflow;
@@ -27,18 +28,18 @@
             var stopWatch = Stopwatch.StartNew();
             IDictionary<string, uint> words;
 
-            words = GetTopWordsSequential();
-            words = GetTopWordsSequentialLINQ();
-            words = GetTopWordsPLINQNaive();
-            words = GetTopWordsPLINQ();
-            words = GetTopWordsPLINQMapReduce();
+//            words = GetTopWordsSequential();
+//            words = GetTopWordsSequentialLINQ();
+//            words = GetTopWordsPLINQNaive();
+//            words = GetTopWordsPLINQ();
+//            words = GetTopWordsPLINQMapReduce();
             words = GetTopWordsPLINQConcurrentDictionary();
-            words = GetTopWordsPLINQProducerConsumer();
-            words = GetTopWordsParallelForEachMapReduce();
-            words = GetTopWordsParallelForEachConcurrentDictionary();
-            words = GetTopWordsProducerConsumer();
-            words = GetTopWordsProducerConsumerEasier();
-            words = GetTopWordsDataFlow();
+//            words = GetTopWordsPLINQProducerConsumer();
+//            words = GetTopWordsParallelForEachMapReduce();
+//            words = GetTopWordsParallelForEachConcurrentDictionary();
+//            words = GetTopWordsProducerConsumer();
+//            words = GetTopWordsProducerConsumerEasier();
+//            words = GetTopWordsDataFlow();
 
             stopWatch.Stop();
 
@@ -62,18 +63,41 @@
             }
         }
 
+        private static IEnumerable<string> GetWords(Stream input, char[] separators, int bufferSize = 4096, bool leaveOpen = true)
+        {
+            var set = new HashSet<char>(separators);
+            using (var stream = new StreamReader(input, Encoding.UTF8, true, bufferSize, leaveOpen))
+            {
+                var builder = new StringBuilder();
+
+                do
+                {
+                    var character = (char)stream.Read();
+
+                    if (set.Contains(character) || character == '\r' || character == '\n' || character == -1)
+                    {
+                        if (builder.Length == 0) { continue; }
+
+                        var word = builder.ToString();
+                        builder.Clear();
+                        yield return word;
+                    } else
+                    {
+                        builder.Append(character);
+                    }
+                } while (!stream.EndOfStream);
+            }
+        }
+
         private static IDictionary<string, uint> GetTopWordsSequential()
         {
             Console.WriteLine(nameof(GetTopWordsSequential) + "...");
 
             var result = new Dictionary<string, uint>(StringComparer.InvariantCultureIgnoreCase);
-            foreach (var line in File.ReadLines(InputFile.FullName))
+            foreach (var word in GetWords(File.OpenRead(InputFile.FullName), Separators, 4096, false))
             {
-                foreach (var word in line.Split(Separators, StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (!IsValidWord(word)) { continue; }
-                    TrackWordsOccurrence(result, word);
-                }
+                if (!IsValidWord(word)) { continue; }
+                TrackWordsOccurrence(result, word);
             }
 
             return result
@@ -89,7 +113,7 @@
             return File.ReadLines(InputFile.FullName)
                 .SelectMany(l => l.Split(Separators, StringSplitOptions.RemoveEmptyEntries))
                 .Where(IsValidWord)
-                .ToLookup(x => x, StringComparer.InvariantCultureIgnoreCase)
+                .GroupBy(x => x, StringComparer.InvariantCultureIgnoreCase)
                 .Select(x => new { Word = x.Key, Count = (uint)x.Count() })
                 .OrderByDescending(kv => kv.Count)
                 .Take((int)TopCount)
@@ -182,6 +206,7 @@
 
             File.ReadLines(InputFile.FullName)
                 .AsParallel()
+                .WithDegreeOfParallelism(4)
                 .ForAll(line =>
                 {
                     foreach (var word in line.Split(Separators, StringSplitOptions.RemoveEmptyEntries))
