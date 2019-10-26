@@ -6,6 +6,7 @@
     using System.Linq;
     using System.Text;
     using BenchmarkDotNet.Attributes;
+    using BenchmarkDotNet.Jobs;
     using BenchmarkDotNet.Running;
     using Easy.Common;
 
@@ -21,7 +22,10 @@
     }
 
     [MemoryDiagnoser]
-    [ClrJob, CoreJob(baseline: true)]
+    [SimpleJob(RuntimeMoniker.NetCoreApp30, baseline: true)]
+    [SimpleJob(RuntimeMoniker.NetCoreApp31)]
+    [SimpleJob(RuntimeMoniker.Net48)]
+    [SimpleJob(RuntimeMoniker.Net472)]
     public class Benchmarker
     {
         private readonly MatchFilter _matchFilter;
@@ -91,7 +95,7 @@
 
         public string RenderStringFormat() => string.Format("\"{0}:{1}\"", Field, Value);
 
-        static StringBuilder BUILDER = new StringBuilder();
+        static readonly StringBuilder BUILDER = new StringBuilder();
         public string RenderStringBuilder() =>
             BUILDER
                 .Clear()
